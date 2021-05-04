@@ -13,19 +13,14 @@ inotifywait -m --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
 		if [ -f "${dirpath}${filename}" ] ; then
 		    case "$(echo "${filename##*.}" | tr '[:upper:]' '[:lower:]')" in
 			"heic")
-			    touch "${dirpath}CONVERT-GO-AHEAD"
-			    declare msg="$(nice mogrify -format jpg "${dirpath}${filename}")"
-			    if [ $(id -u) -eq 0 -a -f "${dirpath}${filename%.*}.jpg" ] ; then
-				chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.jpg"
-			    else
-				sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.jpg"
-			    fi
+			    # srcファイルの所持者の権限で実行する
+			    declare msg=$(sudo -n -u $(stat -c '%U' "${dirpath}${filename}") mogrify -format jpg "${dirpath}${filename}")
 			    if [ ! -z "${msg}" ] ; then
 				echo "${msg}" > "${dirpath}${filename%.*}.log"
 			    fi
-			    rm "${dirpath}CONVERT-GO-AHEAD"
 			    ;;
 			"mov")
+			    touch "${dirpath}CONVERT-GO-AHEAD"
 			    declare msg="$(nice ffmpeg -loglevel warning -i "${dirpath}$filename" -pix_fmt yuv420p "${dirpath}${filename%.*}-conv.mp4" 2>&1)"
 			    if [ ! -z "${msg}" ] ; then
 				echo "${msg}" > "${dirpath}${filename%.*}.log"
@@ -48,8 +43,10 @@ inotifywait -m --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
 				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
 				fi
 			    fi
+			    rm "${dirpath}CONVERT-GO-AHEAD"
 			    ;;
 			"mkv")
+			    touch "${dirpath}CONVERT-GO-AHEAD"
 			    declare msg="$(nice ffmpeg -loglevel warning -i "${dirpath}$filename" -vcodec copy "${dirpath}${filename%.*}-conv.mp4" 2>&1)"
 			    if [ ! -z "${msg}" ] ; then
 				echo "${msg}" > "${dirpath}${filename%.*}.log"
@@ -72,6 +69,7 @@ inotifywait -m --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
 				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
 				fi
 			    fi
+			    rm "${dirpath}CONVERT-GO-AHEAD"
 			    ;;
 			"mp4"|"jpg"|"log")
 			    ;;
