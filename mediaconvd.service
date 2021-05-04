@@ -1,0 +1,19 @@
+[Unit]
+Description=Media convert daemon
+After=network-online.target
+
+; It makes sense to have Samba running when wsdd starts, but is not required
+Wants=smb.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/mediaconvd
+; Replace those with an unprivledged user/group that matches your environment,
+; like nobody/nogroup or daemon:daemon or a dedicated user for wsdd
+User=mediaconvd
+Group=mediaconvd
+
+[Install]
+WantedBy=multi-user.target
+
+
