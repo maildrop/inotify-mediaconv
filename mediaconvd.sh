@@ -26,7 +26,7 @@ inotifywait -m --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
 			"mov")
 			    if [ ! -f "${dirpath}${filename%.*}.mp4" ] ; then
 				touch "${dirpath}CONVERT-GO-AHEAD.log"
-				declare msg="$(nice ffmpeg -loglevel warning -i "${dirpath}$filename" -pix_fmt yuv420p "${dirpath}${filename%.*}-conv.mp4" 2>&1)"
+				declare msg="$(nice ffmpeg -loglevel warning -y -vaapi_device /dev/dri/renderD128 -i "${dirpath}$filename" -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 12M  "${dirpath}${filename%.*}-conv.mp4" 2>&1)"
 				if [ ! -z "${msg}" ] ; then
 				    echo "${msg}" > "${dirpath}${filename%.*}.log"
 				fi
