@@ -6,7 +6,7 @@ export PATH=/bin:/usr/bin
 trap "exit 0" 3 # QUITシグナルで停止
 
 declare HOTPATH=/var/lib/samba/media-convert
-inotifywait -m --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
+inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | \
     while read -r dirpath event filename ; do
 	case "$event" in 
 	    "CLOSE_WRITE,CLOSE")
