@@ -14,7 +14,10 @@ declare HOTPATH=/var/lib/samba/shared/media-convert
 # ダメ。これも出力をキャンセルされちゃう
 inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | cat | \
     while read -r dirpath event filename ; do
-	echo "$dirpath$filename $event"
+	declare path=$(readlink -f "${dirpath}")/${filename}
+
+	echo "$path $event"
+	
 	case "$event" in 
 	    "CLOSE_WRITE,CLOSE")
 		if [ -f "${dirpath}${filename}" ] ; then
@@ -30,36 +33,49 @@ inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | c
 				echo "${dirpath}${filename%.*}.jpg" is existed, skip the file.
 			    fi
 			    ;;
+
 			"mov")
 			    if [ ! -f "${dirpath}${filename%.*}.mp4" ] ; then
+				# srcfile is ffmpeg input file , not the original file. 
+				declare srcfile=$(mktemp "/tmp/mediaconv.XXXXXXXXXX.mov")
+				declare logfile=$(mktemp "/tmp/mediaconv.XXXXXXXXXX.log")
+
 				touch "${dirpath}CONVERT-GO-AHEAD.log"
-				declare msg="$(nice ffmpeg -loglevel warning -y -vaapi_device /dev/dri/renderD128 -i "${dirpath}$filename" -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 12M  "${dirpath}${filename%.*}-conv.mp4" 2>&1)"
-				if [ ! -z "${msg}" ] ; then
-				    echo "${msg}" > "${dirpath}${filename%.*}.log"
+
+				qt-faststart "${path}" "${srcfile}" 2>&1 > "${logfile}"
+				if [ $(stat --printf "%s" "${srcfile}") -eq 0 ] ; then
+				    ln -f -s "${path}" "${srcfile}"
 				fi
+
+				cat "${srcfile}" | nice ffmpeg -loglevel warning -y -vaapi_device /dev/dri/renderD128 -i pipe:0 -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 12M  "${dirpath}${filename%.*}-conv.mp4" 2>&1 >> "${logfile}"
+
 				if [ -f "${dirpath}${filename%.*}-conv.mp4" ] ; then
 				    mv "${dirpath}${filename%.*}-conv.mp4" "${dirpath}${filename%.*}.mp4"
 				fi
-				if [ $(id -u) -eq 0 ] ; then
-				    if [ -f "${dirpath}${filename%.*}.log" ] ; then
-					chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.log"
-				    fi
-				    if [ -f "${dirpath}${filename%.*}.mp4" ] ; then
-					chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
-				    fi
+
+				if [ -f "${dirpath}${filename%.*}.log" ] ; then
+				    for i in {0..10000}; do
+					if [ ! -f "${dirpath}${filename%.*}.${i}.log" ] ; then
+					    mv "${logfile}" "${dirpath}${filename%.*}.${i}.log" &&
+					    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.${i}.log"
+					    break
+					fi
+				    done
 				else
-				    if [ -f "${dirpath}${filename%.*}.log" ] ; then
-					sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.log"
-				    fi
-				    if [ -f "${dirpath}${filename%.*}.mp4" ] ; then
-					sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
-				    fi
+				    mv "${logfile}" "${dirpath}${filename%.*}.log" &&
+				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.log"
+				fi
+				
+				if [ -f "${dirpath}${filename%.*}.mp4" ] ; then
+				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
 				fi
 				rm "${dirpath}CONVERT-GO-AHEAD.log"
+				rm "${srcfile}"
 			    else
 				echo "${dirpath}${filename%.*}.mp4" is existed, skip the file.
 			    fi
 			    ;;
+
 			"mkv")
 			    if [ ! -f "${dirpath}${filename%.*}.mp4" ] ; then
 				touch "${dirpath}CONVERT-GO-AHEAD.log"
