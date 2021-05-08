@@ -22,7 +22,7 @@ inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | c
 			"heic")
 			    # srcファイルの所持者の権限で実行する
 			    if [ ! -f "${dirpath}${filename%.*}.jpg" ] ; then
-				declare msg=$(sudo -n -u $(stat -c '%U' "${dirpath}${filename}") mogrify -format jpg "${dirpath}${filename}")
+				declare msg=$(sudo -n -u $(stat -c '%U' "${dirpath}${filename}") mogrify -format jpg -strip "${dirpath}${filename}")
 				if [ ! -z "${msg}" ] ; then
 				    echo "${msg}" > "${dirpath}${filename%.*}.log"
 				fi
