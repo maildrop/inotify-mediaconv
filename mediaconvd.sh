@@ -6,6 +6,7 @@ export PATH=/bin:/usr/bin
 trap "exit 0" 3 # QUITシグナルで停止
 
 declare HOTPATH=/var/lib/samba/shared/media-convert
+
 # inotify の後ろの cat はバッファリング処理のため
 # inotifywait のwrite操作でブロックされている間
 # ファイルシステムでの操作が入ると、inotify はブロックされている内容を保持しない
@@ -42,32 +43,40 @@ inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | c
 
 				touch "${dirpath}CONVERT-GO-AHEAD.log"
 
-				qt-faststart "${path}" "${srcfile}" 2>&1 > "${logfile}"
+				flock --shared "${path}" qt-faststart "${path}" "${srcfile}" 2>&1 > "${logfile}"
 				if [ $(stat --printf "%s" "${srcfile}") -eq 0 ] ; then
 				    ln -f -s "${path}" "${srcfile}"
 				fi
 
-				cat "${srcfile}" | nice ffmpeg -loglevel warning -y -vaapi_device /dev/dri/renderD128 -i pipe:0 -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 12M  "${dirpath}${filename%.*}-conv.mp4" 2>&1 >> "${logfile}"
+				if sh -c "cat \"${srcfile}\" | nice ffmpeg -loglevel warning -y -vaapi_device /dev/dri/renderD128 -i pipe:0 -vf 'format=nv12,hwupload' -c:v h264_vaapi -b:v 12M  \"${dirpath}${filename%.*}-conv.mp4\" 2>&1 >> \"${logfile}\"" ; then
+				    echo ok
+				fi
 
 				if [ -f "${dirpath}${filename%.*}-conv.mp4" ] ; then
 				    mv "${dirpath}${filename%.*}-conv.mp4" "${dirpath}${filename%.*}.mp4"
 				fi
 
+				declare require_owner=$(stat -c '%U:%G' "${dirpath}${filename}")
+				echo "owner-request: $require_owner"
 				if [ -f "${dirpath}${filename%.*}.log" ] ; then
 				    for i in {0..10000}; do
 					if [ ! -f "${dirpath}${filename%.*}.${i}.log" ] ; then
-					    mv "${logfile}" "${dirpath}${filename%.*}.${i}.log" &&
-					    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.${i}.log"
+					    mv "${logfile}" "${dirpath}${filename%.*}.${i}.log"
+					    if [ -f "${dirpath}${filename%.*}.${i}.log" ] ; then
+						sudo chown $require_owner "${dirpath}${filename%.*}.${i}.log"
+					    fi
 					    break
 					fi
 				    done
 				else
-				    mv "${logfile}" "${dirpath}${filename%.*}.log" &&
-				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.log"
+				    mv "${logfile}" "${dirpath}${filename%.*}.log" 
+				    if [ -f "${dirpath}${filename%.*}.log" ] ; then
+					sudo chown "$require_owner" "${dirpath}${filename%.*}.log"
+				    fi
 				fi
 				
 				if [ -f "${dirpath}${filename%.*}.mp4" ] ; then
-				    sudo chown $(stat -c '%U:%G' "${dirpath}${filename}") "${dirpath}${filename%.*}.mp4"
+				    sudo chown "$require_owner" "${dirpath}${filename%.*}.mp4"
 				fi
 				rm "${dirpath}CONVERT-GO-AHEAD.log"
 				rm "${srcfile}"
