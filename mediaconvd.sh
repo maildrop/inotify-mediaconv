@@ -5,13 +5,14 @@ export PATH=/bin:/usr/bin
 
 trap "exit 0" 3 # QUITシグナルで停止
 
-declare HOTPATH=/var/lib/samba/media-convert
+declare HOTPATH=/var/lib/samba/shared/media-convert
 # inotify の後ろの cat はバッファリング処理のため
 # inotifywait のwrite操作でブロックされている間
 # ファイルシステムでの操作が入ると、inotify はブロックされている内容を保持しない
 # （これは、複数のファイルを一度にコピーした時におきる。）
 # このために、一旦 cat でバッファリングさせてシェル側で一行ずつ読み込む
-inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | cat |\
+# ダメ。これも出力をキャンセルされちゃう
+inotifywait --monitor --event close_write,moved_to "${HOTPATH}" 2> /dev/null | cat | \
     while read -r dirpath event filename ; do
 	echo "$dirpath$filename $event"
 	case "$event" in 
